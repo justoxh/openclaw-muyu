@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.2.2';
+const APP_VERSION = 'v1.2.3';
 const STORAGE_KEY = 'openclaw-muyu-v1';
 const DAILY_GOAL = 18;
 const AUDIO_FILES = [
@@ -7,8 +7,7 @@ const AUDIO_FILES = [
   './assets/muyu-3.mp3',
   './assets/muyu-4.mp3'
 ];
-const AUDIO_POOL_SIZE = 3;
-const MAX_ACTIVE_AUDIO = 4;
+const MAX_ACTIVE_SOURCES = 4;
 const RAPID_CLICK_WINDOW_MS = 900;
 
 const comfortMessages = [
@@ -51,20 +50,20 @@ const statusBadgeEl = document.getElementById('statusBadge');
 const versionTextEl = document.getElementById('versionText');
 
 let audioContext;
-let audioPools = [];
+let audioBuffers = [];
 let audioReady = false;
 let audioLoadFailed = false;
-let audioUnlockBound = false;
+let unlockTried = false;
+let interactionLock = false;
 let lastTouchEnd = 0;
 let recentKnockTimes = [];
+let activeSources = [];
 let state = loadState();
 normalizeToday();
 render();
 prepareAudio();
-bindAudioUnlock();
+setupInteractionHandlers();
 
-muyuButtonEl.addEventListener('click', handleKnock);
-muyuButtonEl.addEventListener('touchend', preventDoubleTapZoom, { passive: false });
 soundToggleEl.addEventListener('click', toggleSound);
 shareCopyEl.addEventListener('click', copySummary);
 resetTodayEl.addEventListener('click', resetToday);
@@ -85,9 +84,30 @@ document.addEventListener('keydown', (event) => {
   if (tagName === 'INPUT' || tagName === 'TEXTAREA') return;
   if (event.code === 'Space' || event.code === 'Enter') {
     event.preventDefault();
-    handleKnock(event);
+    triggerKnock(event);
   }
 });
+
+function setupInteractionHandlers() {
+  muyuButtonEl.addEventListener('click', (event) => {
+    event.preventDefault();
+  });
+
+  muyuButtonEl.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (event.pointerType === 'touch') {
+      event.preventDefault();
+    }
+    triggerKnock(event);
+  });
+
+  muyuButtonEl.addEventListener('touchstart', (event) => {
+    event.preventDefault();
+    triggerKnock(event.touches[0] || event.changedTouches[0] || event);
+  }, { passive: false });
+
+  muyuButtonEl.addEventListener('touchend', preventDoubleTapZoom, { passive: false });
+}
 
 function getTodayString() {
   const now = new Date();
@@ -168,6 +188,15 @@ function renderStatus() {
   statusBadgeEl.textContent = level.badge;
 }
 
+function triggerKnock(event) {
+  if (interactionLock) return;
+  interactionLock = true;
+  window.setTimeout(() => {
+    interactionLock = false;
+  }, 18);
+  handleKnock(event);
+}
+
 function handleKnock(event) {
   normalizeToday();
   state.todayMerit += 1;
@@ -236,12 +265,12 @@ function spawnFloatText(event) {
   const rect = floatLayerEl.getBoundingClientRect();
   const text = document.createElement('span');
   text.className = 'float-text';
-
   const variants = ['功德 +1', '先稳住', '缓一缓', '别上头'];
   text.textContent = variants[Math.floor(Math.random() * variants.length)];
 
-  const x = event.clientX ? event.clientX - rect.left : rect.width / 2;
-  const y = event.clientY ? event.clientY - rect.top : rect.height / 2;
+  const point = getEventPoint(event);
+  const x = point.x - rect.left;
+  const y = point.y - rect.top;
 
   text.style.left = `${x}px`;
   text.style.top = `${y}px`;
@@ -250,6 +279,19 @@ function spawnFloatText(event) {
   window.setTimeout(() => {
     text.remove();
   }, 920);
+}
+
+function getEventPoint(event) {
+  if (event?.touches?.[0]) {
+    return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  }
+  if (event?.changedTouches?.[0]) {
+    return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+  }
+  return {
+    x: event?.clientX ?? floatLayerEl.getBoundingClientRect().width / 2,
+    y: event?.clientY ?? floatLayerEl.getBoundingClientRect().height / 2
+  };
 }
 
 function pickRandomMessage() {
@@ -268,111 +310,104 @@ function preventDoubleTapZoom(event) {
   lastTouchEnd = now;
 }
 
-function bindAudioUnlock() {
-  if (audioUnlockBound) return;
-  audioUnlockBound = true;
-
-  const unlock = () => {
-    if (!state.soundEnabled) return;
-    unlockAudioPlayback();
-    document.removeEventListener('pointerdown', unlock);
-    document.removeEventListener('touchstart', unlock);
-    document.removeEventListener('keydown', unlock);
-  };
-
-  document.addEventListener('pointerdown', unlock, { passive: true, once: true });
-  document.addEventListener('touchstart', unlock, { passive: true, once: true });
-  document.addEventListener('keydown', unlock, { passive: true, once: true });
+function ensureAudioContext() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+  return audioContext;
 }
 
-function unlockAudioPlayback() {
+async function prepareAudio() {
   try {
-    getAudioContext();
+    const ctx = ensureAudioContext();
+    const decoded = await Promise.all(
+      AUDIO_FILES.map(async (src) => {
+        const response = await fetch(src);
+        if (!response.ok) {
+          throw new Error(`音频加载失败: ${src}`);
+        }
+        const arrayBuffer = await response.arrayBuffer();
+        return await decodeAudioBuffer(ctx, arrayBuffer);
+      })
+    );
+    audioBuffers = decoded;
+    audioReady = decoded.length > 0;
+    audioLoadFailed = !audioReady;
   } catch (error) {
-    console.warn('AudioContext 初始化失败。', error);
-  }
-
-  for (const pool of audioPools) {
-    for (const audio of pool.players) {
-      audio.muted = true;
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise
-          .then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-            audio.muted = false;
-          })
-          .catch(() => {
-            audio.muted = false;
-          });
-      } else {
-        audio.muted = false;
-      }
-    }
+    console.warn('真实音频预解码失败，回退到合成音效。', error);
+    audioBuffers = [];
+    audioReady = false;
+    audioLoadFailed = true;
   }
 }
 
-function prepareAudio() {
-  audioPools = AUDIO_FILES.map((src) => ({
-    src,
-    players: Array.from({ length: AUDIO_POOL_SIZE }, () => {
-      const audio = new Audio(src);
-      audio.preload = 'auto';
-      audio.playsInline = true;
-      audio.setAttribute('playsinline', '');
-      audio.crossOrigin = 'anonymous';
-      return audio;
-    })
-  }));
-
-  if (!audioPools.length) {
-    audioLoadFailed = true;
-    return;
-  }
-
-  const uniquePlayers = audioPools.flatMap((pool) => pool.players.slice(0, 1));
-  let settled = 0;
-  let successCount = 0;
-  const finish = () => {
-    settled += 1;
-    if (settled === uniquePlayers.length) {
-      audioReady = successCount > 0;
-      audioLoadFailed = successCount === 0;
-    }
-  };
-
-  for (const audio of uniquePlayers) {
-    audio.addEventListener('canplaythrough', () => {
-      successCount += 1;
-      finish();
-    }, { once: true });
-
-    audio.addEventListener('error', () => {
-      finish();
-    }, { once: true });
-
-    audio.load();
-  }
+function decodeAudioBuffer(ctx, arrayBuffer) {
+  return new Promise((resolve, reject) => {
+    ctx.decodeAudioData(arrayBuffer.slice(0), resolve, reject);
+  });
 }
 
 function playKnockSound(volumeScale = 1) {
   recordKnockTime();
   const dynamicVolume = volumeScale * getDynamicVolumeScale();
-
-  if (audioReady && audioPools.length) {
-    const pool = audioPools[Math.floor(Math.random() * audioPools.length)];
-    const player = pickAudioPlayer(pool.players);
-    if (player) {
-      playAudioFile(player, dynamicVolume).catch((error) => {
-        console.warn('音频文件播放失败，回退到合成音效。', error);
-        playWoodSound(dynamicVolume);
-      });
-      return;
-    }
+  if (!unlockTried) {
+    unlockTried = true;
+    ensureAudioContext();
   }
 
+  if (audioReady && audioBuffers.length) {
+    try {
+      playAudioBuffer(dynamicVolume);
+      return;
+    } catch (error) {
+      console.warn('真实音频播放失败，回退到合成音效。', error);
+    }
+  }
   playWoodSound(dynamicVolume);
+}
+
+function playAudioBuffer(volumeScale = 1) {
+  const ctx = ensureAudioContext();
+  if (ctx.state === 'suspended') {
+    ctx.resume();
+  }
+
+  if (activeSources.length >= MAX_ACTIVE_SOURCES) {
+    const oldest = activeSources.shift();
+    try {
+      oldest.source.stop();
+    } catch {}
+  }
+
+  const buffer = audioBuffers[Math.floor(Math.random() * audioBuffers.length)];
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+
+  const gainNode = ctx.createGain();
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.knee.value = 10;
+  compressor.ratio.value = 3;
+  compressor.attack.value = 0.002;
+  compressor.release.value = 0.12;
+
+  const randomized = 0.72 + (Math.random() * 0.12 - 0.06);
+  gainNode.gain.value = Math.min(0.88, Math.max(0.12, randomized * volumeScale));
+
+  source.connect(gainNode);
+  gainNode.connect(compressor);
+  compressor.connect(ctx.destination);
+
+  const item = { source, startedAt: performance.now() };
+  activeSources.push(item);
+  source.onended = () => {
+    activeSources = activeSources.filter((entry) => entry !== item);
+  };
+
+  source.start(0);
 }
 
 function recordKnockTime() {
@@ -384,52 +419,14 @@ function recordKnockTime() {
 function getDynamicVolumeScale() {
   const density = recentKnockTimes.length;
   if (density <= 1) return 1;
-  if (density === 2) return 0.92;
-  if (density === 3) return 0.84;
-  if (density === 4) return 0.76;
-  return 0.68;
-}
-
-function pickAudioPlayer(players) {
-  const pausedPlayer = players.find((audio) => audio.paused || audio.ended);
-  if (pausedPlayer) return pausedPlayer;
-
-  const sortedActive = [...players].sort((a, b) => a.currentTime - b.currentTime);
-  const totalActive = audioPools.flatMap((pool) => pool.players).filter((audio) => !audio.paused && !audio.ended).length;
-
-  if (totalActive >= MAX_ACTIVE_AUDIO) {
-    const oldest = sortedActive[0];
-    oldest.pause();
-    oldest.currentTime = 0;
-    return oldest;
-  }
-
-  return sortedActive[0];
-}
-
-async function playAudioFile(audio, volumeScale = 1) {
-  audio.pause();
-  audio.currentTime = 0;
-  const randomized = 0.72 + (Math.random() * 0.14 - 0.07);
-  audio.volume = Math.min(0.92, Math.max(0.14, randomized * volumeScale));
-  const playPromise = audio.play();
-  if (playPromise && typeof playPromise.then === 'function') {
-    await playPromise;
-  }
-}
-
-function getAudioContext() {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioContext.state === 'suspended') {
-    audioContext.resume();
-  }
-  return audioContext;
+  if (density === 2) return 0.9;
+  if (density === 3) return 0.8;
+  if (density === 4) return 0.72;
+  return 0.64;
 }
 
 function playWoodSound(volumeScale = 1) {
-  const ctx = getAudioContext();
+  const ctx = ensureAudioContext();
   const now = ctx.currentTime;
 
   const master = ctx.createGain();
