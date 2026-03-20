@@ -1,3 +1,4 @@
+const APP_VERSION = 'v1.2.0';
 const STORAGE_KEY = 'openclaw-muyu-v1';
 const DAILY_GOAL = 18;
 
@@ -38,16 +39,23 @@ const goalTextEl = document.getElementById('goalText');
 const todayDateEl = document.getElementById('todayDate');
 const streakTextEl = document.getElementById('streakText');
 const statusBadgeEl = document.getElementById('statusBadge');
+const versionTextEl = document.getElementById('versionText');
 
 let audioContext;
+let lastTouchEnd = 0;
 let state = loadState();
 normalizeToday();
 render();
 
 muyuButtonEl.addEventListener('click', handleKnock);
+muyuButtonEl.addEventListener('touchend', preventDoubleTapZoom, { passive: false });
 soundToggleEl.addEventListener('click', toggleSound);
-resetTodayEl.addEventListener('click', resetToday);
 shareCopyEl.addEventListener('click', copySummary);
+resetTodayEl.addEventListener('click', resetToday);
+
+for (const button of document.querySelectorAll('button')) {
+  button.addEventListener('touchend', preventDoubleTapZoom, { passive: false });
+}
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
@@ -122,6 +130,7 @@ function render() {
   comfortTextEl.textContent = state.comfortText;
   soundToggleEl.textContent = `音效：${state.soundEnabled ? '开' : '关'}`;
   todayDateEl.textContent = formatTodayLabel();
+  versionTextEl.textContent = APP_VERSION;
   renderGoal();
   renderStatus();
 }
@@ -164,7 +173,7 @@ function toggleSound() {
   saveState();
   render();
   if (state.soundEnabled) {
-    playWoodSound(0.4);
+    playWoodSound(0.45);
   }
 }
 
@@ -235,6 +244,14 @@ function pickRandomMessage() {
   return comfortMessages[(comfortMessages.indexOf(next) + 1) % comfortMessages.length];
 }
 
+function preventDoubleTapZoom(event) {
+  const now = Date.now();
+  if (now - lastTouchEnd <= 320) {
+    event.preventDefault();
+  }
+  lastTouchEnd = now;
+}
+
 function getAudioContext() {
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -251,52 +268,86 @@ function playWoodSound(volumeScale = 1) {
 
   const master = ctx.createGain();
   master.gain.setValueAtTime(0.0001, now);
-  master.gain.exponentialRampToValueAtTime(0.22 * volumeScale, now + 0.01);
-  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+  master.gain.exponentialRampToValueAtTime(0.28 * volumeScale, now + 0.008);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
   master.connect(ctx.destination);
 
-  const tone1 = ctx.createOscillator();
-  tone1.type = 'triangle';
-  tone1.frequency.setValueAtTime(560, now);
-  tone1.frequency.exponentialRampToValueAtTime(260, now + 0.18);
+  const body = ctx.createOscillator();
+  body.type = 'triangle';
+  body.frequency.setValueAtTime(480, now);
+  body.frequency.exponentialRampToValueAtTime(215, now + 0.22);
 
-  const tone2 = ctx.createOscillator();
-  tone2.type = 'sine';
-  tone2.frequency.setValueAtTime(880, now);
-  tone2.frequency.exponentialRampToValueAtTime(420, now + 0.12);
+  const bodyGain = ctx.createGain();
+  bodyGain.gain.setValueAtTime(0.22 * volumeScale, now);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
 
-  const partialGain = ctx.createGain();
-  partialGain.gain.setValueAtTime(0.18 * volumeScale, now);
-  partialGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+  const resonance = ctx.createOscillator();
+  resonance.type = 'sine';
+  resonance.frequency.setValueAtTime(760, now + 0.01);
+  resonance.frequency.exponentialRampToValueAtTime(360, now + 0.28);
 
-  const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.06, ctx.sampleRate);
+  const resonanceGain = ctx.createGain();
+  resonanceGain.gain.setValueAtTime(0.0001, now);
+  resonanceGain.gain.exponentialRampToValueAtTime(0.12 * volumeScale, now + 0.015);
+  resonanceGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+
+  const tail = ctx.createOscillator();
+  tail.type = 'sine';
+  tail.frequency.setValueAtTime(235, now + 0.02);
+  tail.frequency.exponentialRampToValueAtTime(180, now + 0.5);
+
+  const tailGain = ctx.createGain();
+  tailGain.gain.setValueAtTime(0.0001, now + 0.02);
+  tailGain.gain.exponentialRampToValueAtTime(0.08 * volumeScale, now + 0.04);
+  tailGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.68);
+
+  const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate);
   const noiseData = noiseBuffer.getChannelData(0);
   for (let i = 0; i < noiseData.length; i += 1) {
     noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseData.length);
   }
 
-  const noise = ctx.createBufferSource();
-  noise.buffer = noiseBuffer;
-  const noiseFilter = ctx.createBiquadFilter();
-  noiseFilter.type = 'bandpass';
-  noiseFilter.frequency.value = 1300;
-  noiseFilter.Q.value = 0.7;
-  const noiseGain = ctx.createGain();
-  noiseGain.gain.setValueAtTime(0.12 * volumeScale, now);
-  noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+  const strike = ctx.createBufferSource();
+  strike.buffer = noiseBuffer;
 
-  tone1.connect(master);
-  tone2.connect(partialGain);
-  partialGain.connect(master);
-  noise.connect(noiseFilter);
-  noiseFilter.connect(noiseGain);
-  noiseGain.connect(master);
+  const strikeFilter = ctx.createBiquadFilter();
+  strikeFilter.type = 'bandpass';
+  strikeFilter.frequency.value = 1800;
+  strikeFilter.Q.value = 1.1;
 
-  tone1.start(now);
-  tone2.start(now);
-  noise.start(now);
+  const strikeGain = ctx.createGain();
+  strikeGain.gain.setValueAtTime(0.2 * volumeScale, now);
+  strikeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.055);
 
-  tone1.stop(now + 0.42);
-  tone2.stop(now + 0.22);
-  noise.stop(now + 0.07);
+  const compressor = ctx.createDynamicsCompressor();
+  compressor.threshold.value = -18;
+  compressor.knee.value = 12;
+  compressor.ratio.value = 3;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.18;
+
+  body.connect(bodyGain);
+  bodyGain.connect(compressor);
+
+  resonance.connect(resonanceGain);
+  resonanceGain.connect(compressor);
+
+  tail.connect(tailGain);
+  tailGain.connect(compressor);
+
+  strike.connect(strikeFilter);
+  strikeFilter.connect(strikeGain);
+  strikeGain.connect(compressor);
+
+  compressor.connect(master);
+
+  body.start(now);
+  resonance.start(now);
+  tail.start(now);
+  strike.start(now);
+
+  body.stop(now + 0.36);
+  resonance.stop(now + 0.42);
+  tail.stop(now + 0.7);
+  strike.stop(now + 0.06);
 }
