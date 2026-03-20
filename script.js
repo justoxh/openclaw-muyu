@@ -1,4 +1,4 @@
-const APP_VERSION = 'v1.2.3';
+const APP_VERSION = 'v1.2.4';
 const STORAGE_KEY = 'openclaw-muyu-v1';
 const DAILY_GOAL = 18;
 const AUDIO_FILES = [
@@ -53,7 +53,7 @@ let audioContext;
 let audioBuffers = [];
 let audioReady = false;
 let audioLoadFailed = false;
-let unlockTried = false;
+let audioInitPromise = null;
 let interactionLock = false;
 let lastTouchEnd = 0;
 let recentKnockTimes = [];
@@ -61,7 +61,6 @@ let activeSources = [];
 let state = loadState();
 normalizeToday();
 render();
-prepareAudio();
 setupInteractionHandlers();
 
 soundToggleEl.addEventListener('click', toggleSound);
@@ -95,9 +94,7 @@ function setupInteractionHandlers() {
 
   muyuButtonEl.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    if (event.pointerType === 'touch') {
-      event.preventDefault();
-    }
+    if (event.pointerType === 'touch') event.preventDefault();
     triggerKnock(event);
   });
 
@@ -111,10 +108,7 @@ function setupInteractionHandlers() {
 
 function getTodayString() {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
 function formatTodayLabel() {
@@ -126,10 +120,7 @@ function formatTodayLabel() {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return defaultState();
-    }
-    return { ...defaultState(), ...JSON.parse(raw) };
+    return raw ? { ...defaultState(), ...JSON.parse(raw) } : defaultState();
   } catch (error) {
     console.warn('读取本地记录失败，使用默认状态。', error);
     return defaultState();
@@ -174,12 +165,9 @@ function render() {
 function renderGoal() {
   const progress = Math.min(state.todayMerit / DAILY_GOAL, 1);
   progressBarEl.style.width = `${progress * 100}%`;
-  if (state.todayMerit >= DAILY_GOAL) {
-    goalTextEl.textContent = `今日 ${DAILY_GOAL} 下已达标，可以收手，也可以继续积。`;
-    return;
-  }
-  const remain = DAILY_GOAL - state.todayMerit;
-  goalTextEl.textContent = `再敲 ${remain} 下，给今天一点交代`;
+  goalTextEl.textContent = state.todayMerit >= DAILY_GOAL
+    ? `今日 ${DAILY_GOAL} 下已达标，可以收手，也可以继续积。`
+    : `再敲 ${DAILY_GOAL - state.todayMerit} 下，给今天一点交代`;
 }
 
 function renderStatus() {
@@ -193,7 +181,7 @@ function triggerKnock(event) {
   interactionLock = true;
   window.setTimeout(() => {
     interactionLock = false;
-  }, 18);
+  }, 22);
   handleKnock(event);
 }
 
@@ -209,7 +197,7 @@ function handleKnock(event) {
   animateKnock();
   spawnFloatText(event);
   if (state.soundEnabled) {
-    playKnockSound();
+    void playKnockSound();
   }
 }
 
@@ -218,7 +206,7 @@ function toggleSound() {
   saveState();
   render();
   if (state.soundEnabled) {
-    playKnockSound(0.38);
+    void playKnockSound(0.32);
   }
 }
 
@@ -238,7 +226,7 @@ async function copySummary() {
   try {
     await navigator.clipboard.writeText(text);
     state.comfortText = '今日战绩已经复制好了，发不发随你。';
-  } catch (error) {
+  } catch {
     state.comfortText = '复制没成功。浏览器不配合，你就手动炫耀吧。';
   }
   saveState();
@@ -267,46 +255,30 @@ function spawnFloatText(event) {
   text.className = 'float-text';
   const variants = ['功德 +1', '先稳住', '缓一缓', '别上头'];
   text.textContent = variants[Math.floor(Math.random() * variants.length)];
-
   const point = getEventPoint(event);
-  const x = point.x - rect.left;
-  const y = point.y - rect.top;
-
-  text.style.left = `${x}px`;
-  text.style.top = `${y}px`;
+  text.style.left = `${point.x - rect.left}px`;
+  text.style.top = `${point.y - rect.top}px`;
   floatLayerEl.appendChild(text);
-
-  window.setTimeout(() => {
-    text.remove();
-  }, 920);
+  window.setTimeout(() => text.remove(), 920);
 }
 
 function getEventPoint(event) {
-  if (event?.touches?.[0]) {
-    return { x: event.touches[0].clientX, y: event.touches[0].clientY };
-  }
-  if (event?.changedTouches?.[0]) {
-    return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
-  }
-  return {
-    x: event?.clientX ?? floatLayerEl.getBoundingClientRect().width / 2,
-    y: event?.clientY ?? floatLayerEl.getBoundingClientRect().height / 2
-  };
+  if (event?.touches?.[0]) return { x: event.touches[0].clientX, y: event.touches[0].clientY };
+  if (event?.changedTouches?.[0]) return { x: event.changedTouches[0].clientX, y: event.changedTouches[0].clientY };
+  const rect = floatLayerEl.getBoundingClientRect();
+  return { x: event?.clientX ?? rect.width / 2, y: event?.clientY ?? rect.height / 2 };
 }
 
 function pickRandomMessage() {
   const next = comfortMessages[Math.floor(Math.random() * comfortMessages.length)];
-  if (comfortMessages.length === 1 || next !== state.comfortText) {
-    return next;
-  }
-  return comfortMessages[(comfortMessages.indexOf(next) + 1) % comfortMessages.length];
+  return comfortMessages.length === 1 || next !== state.comfortText
+    ? next
+    : comfortMessages[(comfortMessages.indexOf(next) + 1) % comfortMessages.length];
 }
 
 function preventDoubleTapZoom(event) {
   const now = Date.now();
-  if (now - lastTouchEnd <= 320) {
-    event.preventDefault();
-  }
+  if (now - lastTouchEnd <= 320) event.preventDefault();
   lastTouchEnd = now;
 }
 
@@ -320,28 +292,33 @@ function ensureAudioContext() {
   return audioContext;
 }
 
-async function prepareAudio() {
-  try {
-    const ctx = ensureAudioContext();
-    const decoded = await Promise.all(
-      AUDIO_FILES.map(async (src) => {
+async function initAudioIfNeeded() {
+  if (audioReady || audioLoadFailed) return;
+  if (audioInitPromise) return audioInitPromise;
+
+  audioInitPromise = (async () => {
+    try {
+      const ctx = ensureAudioContext();
+      const decoded = [];
+      for (const src of AUDIO_FILES) {
         const response = await fetch(src);
-        if (!response.ok) {
-          throw new Error(`音频加载失败: ${src}`);
-        }
+        if (!response.ok) throw new Error(`音频加载失败: ${src}`);
         const arrayBuffer = await response.arrayBuffer();
-        return await decodeAudioBuffer(ctx, arrayBuffer);
-      })
-    );
-    audioBuffers = decoded;
-    audioReady = decoded.length > 0;
-    audioLoadFailed = !audioReady;
-  } catch (error) {
-    console.warn('真实音频预解码失败，回退到合成音效。', error);
-    audioBuffers = [];
-    audioReady = false;
-    audioLoadFailed = true;
-  }
+        const buffer = await decodeAudioBuffer(ctx, arrayBuffer);
+        decoded.push(buffer);
+      }
+      audioBuffers = decoded;
+      audioReady = decoded.length > 0;
+      audioLoadFailed = !audioReady;
+    } catch (error) {
+      console.warn('真实音频初始化失败，回退到合成音效。', error);
+      audioBuffers = [];
+      audioReady = false;
+      audioLoadFailed = true;
+    }
+  })();
+
+  return audioInitPromise;
 }
 
 function decodeAudioBuffer(ctx, arrayBuffer) {
@@ -350,36 +327,34 @@ function decodeAudioBuffer(ctx, arrayBuffer) {
   });
 }
 
-function playKnockSound(volumeScale = 1) {
+async function playKnockSound(volumeScale = 1) {
   recordKnockTime();
   const dynamicVolume = volumeScale * getDynamicVolumeScale();
-  if (!unlockTried) {
-    unlockTried = true;
-    ensureAudioContext();
-  }
 
-  if (audioReady && audioBuffers.length) {
-    try {
+  try {
+    ensureAudioContext();
+    if (!audioReady && !audioLoadFailed) {
+      void initAudioIfNeeded();
+      playWoodSound(Math.min(dynamicVolume, 0.28));
+      return;
+    }
+
+    if (audioReady && audioBuffers.length) {
       playAudioBuffer(dynamicVolume);
       return;
-    } catch (error) {
-      console.warn('真实音频播放失败，回退到合成音效。', error);
     }
+  } catch (error) {
+    console.warn('真实音频播放失败，回退到合成音效。', error);
   }
+
   playWoodSound(dynamicVolume);
 }
 
 function playAudioBuffer(volumeScale = 1) {
   const ctx = ensureAudioContext();
-  if (ctx.state === 'suspended') {
-    ctx.resume();
-  }
-
   if (activeSources.length >= MAX_ACTIVE_SOURCES) {
     const oldest = activeSources.shift();
-    try {
-      oldest.source.stop();
-    } catch {}
+    try { oldest.source.stop(); } catch {}
   }
 
   const buffer = audioBuffers[Math.floor(Math.random() * audioBuffers.length)];
@@ -406,7 +381,6 @@ function playAudioBuffer(volumeScale = 1) {
   source.onended = () => {
     activeSources = activeSources.filter((entry) => entry !== item);
   };
-
   source.start(0);
 }
 
@@ -428,85 +402,56 @@ function getDynamicVolumeScale() {
 function playWoodSound(volumeScale = 1) {
   const ctx = ensureAudioContext();
   const now = ctx.currentTime;
-
   const master = ctx.createGain();
   master.gain.setValueAtTime(0.0001, now);
   master.gain.exponentialRampToValueAtTime(0.24 * volumeScale, now + 0.008);
-  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.58);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
   master.connect(ctx.destination);
 
   const body = ctx.createOscillator();
   body.type = 'triangle';
   body.frequency.setValueAtTime(480, now);
-  body.frequency.exponentialRampToValueAtTime(215, now + 0.18);
-
+  body.frequency.exponentialRampToValueAtTime(215, now + 0.14);
   const bodyGain = ctx.createGain();
-  bodyGain.gain.setValueAtTime(0.19 * volumeScale, now);
-  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+  bodyGain.gain.setValueAtTime(0.18 * volumeScale, now);
+  bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
 
   const resonance = ctx.createOscillator();
   resonance.type = 'sine';
   resonance.frequency.setValueAtTime(760, now + 0.01);
-  resonance.frequency.exponentialRampToValueAtTime(360, now + 0.22);
-
+  resonance.frequency.exponentialRampToValueAtTime(360, now + 0.18);
   const resonanceGain = ctx.createGain();
   resonanceGain.gain.setValueAtTime(0.0001, now);
-  resonanceGain.gain.exponentialRampToValueAtTime(0.1 * volumeScale, now + 0.015);
-  resonanceGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+  resonanceGain.gain.exponentialRampToValueAtTime(0.08 * volumeScale, now + 0.015);
+  resonanceGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
 
-  const tail = ctx.createOscillator();
-  tail.type = 'sine';
-  tail.frequency.setValueAtTime(235, now + 0.02);
-  tail.frequency.exponentialRampToValueAtTime(180, now + 0.36);
-
-  const tailGain = ctx.createGain();
-  tailGain.gain.setValueAtTime(0.0001, now + 0.02);
-  tailGain.gain.exponentialRampToValueAtTime(0.05 * volumeScale, now + 0.04);
-  tailGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.44);
-
-  const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.04, ctx.sampleRate);
+  const noiseBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.03, ctx.sampleRate);
   const noiseData = noiseBuffer.getChannelData(0);
   for (let i = 0; i < noiseData.length; i += 1) {
     noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseData.length);
   }
-
   const strike = ctx.createBufferSource();
   strike.buffer = noiseBuffer;
-
   const strikeFilter = ctx.createBiquadFilter();
   strikeFilter.type = 'bandpass';
   strikeFilter.frequency.value = 1800;
   strikeFilter.Q.value = 1.1;
-
   const strikeGain = ctx.createGain();
   strikeGain.gain.setValueAtTime(0.16 * volumeScale, now);
-  strikeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
-
-  const compressor = ctx.createDynamicsCompressor();
-  compressor.threshold.value = -20;
-  compressor.knee.value = 14;
-  compressor.ratio.value = 4;
-  compressor.attack.value = 0.002;
-  compressor.release.value = 0.14;
+  strikeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
 
   body.connect(bodyGain);
-  bodyGain.connect(compressor);
+  bodyGain.connect(master);
   resonance.connect(resonanceGain);
-  resonanceGain.connect(compressor);
-  tail.connect(tailGain);
-  tailGain.connect(compressor);
+  resonanceGain.connect(master);
   strike.connect(strikeFilter);
   strikeFilter.connect(strikeGain);
-  strikeGain.connect(compressor);
-  compressor.connect(master);
+  strikeGain.connect(master);
 
   body.start(now);
   resonance.start(now);
-  tail.start(now);
   strike.start(now);
-
-  body.stop(now + 0.28);
-  resonance.stop(now + 0.32);
-  tail.stop(now + 0.46);
-  strike.stop(now + 0.05);
+  body.stop(now + 0.22);
+  resonance.stop(now + 0.24);
+  strike.stop(now + 0.04);
 }
