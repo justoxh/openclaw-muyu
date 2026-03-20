@@ -1,12 +1,13 @@
 :root {
   --bg: #f4ede2;
   --bg-deep: #eadac6;
-  --panel: rgba(255, 250, 243, 0.78);
+  --panel: rgba(255, 250, 243, 0.8);
   --panel-border: rgba(123, 87, 46, 0.14);
   --text: #3f2b1f;
   --muted: #7f6652;
   --accent: #9f6232;
   --accent-strong: #7b451c;
+  --accent-soft: rgba(159, 98, 50, 0.12);
   --gold: #d7af62;
   --shadow: 0 22px 60px rgba(91, 59, 29, 0.14);
   --shadow-soft: 0 10px 30px rgba(91, 59, 29, 0.1);
@@ -26,7 +27,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif;
   color: var(--text);
   background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.8), transparent 32%),
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.84), transparent 32%),
     linear-gradient(180deg, #f8f2e9 0%, var(--bg) 45%, var(--bg-deep) 100%);
   display: flex;
   align-items: center;
@@ -41,7 +42,7 @@ button {
 
 .app {
   position: relative;
-  width: min(100%, 760px);
+  width: min(100%, 780px);
   padding: 36px 28px 28px;
   border-radius: 28px;
   background: var(--panel);
@@ -54,16 +55,36 @@ button {
   text-align: center;
 }
 
+.hero-topline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .eyebrow {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--accent);
   font-size: 14px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 
+.date-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .hero h1 {
-  margin: 0;
+  margin: 14px 0 0;
   font-size: clamp(34px, 7vw, 52px);
   line-height: 1.05;
 }
@@ -75,9 +96,54 @@ button {
   font-size: clamp(15px, 2.8vw, 18px);
 }
 
+.daily-panel {
+  margin: 22px auto 0;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.daily-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.daily-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.daily-copy strong {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.progress-wrap {
+  margin-top: 12px;
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(123, 87, 46, 0.1);
+}
+
+.progress-bar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #c9894d 0%, var(--gold) 100%);
+  transition: width 220ms ease;
+  box-shadow: 0 0 12px rgba(215, 175, 98, 0.3);
+}
+
 .muyu-section {
   position: relative;
-  margin: 28px 0 18px;
+  margin: 22px 0 18px;
   min-height: 330px;
   display: flex;
   align-items: center;
@@ -95,8 +161,14 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.muyu-button:focus-visible {
+  outline: 3px solid rgba(215, 175, 98, 0.5);
+  outline-offset: 8px;
+  border-radius: 24px;
+}
+
 .muyu-button:active {
-  transform: scale(0.98);
+  transform: scale(0.985);
 }
 
 .halo {
@@ -106,6 +178,24 @@ button {
   background: radial-gradient(circle, rgba(215, 175, 98, 0.28) 0%, rgba(215, 175, 98, 0.08) 42%, transparent 72%);
   filter: blur(6px);
   animation: pulse 3.8s ease-in-out infinite;
+}
+
+.spark {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 231, 179, 0.75);
+  filter: blur(1px);
+  opacity: 0;
+}
+
+.spark-1 { top: 68px; left: 78px; }
+.spark-2 { top: 42px; right: 92px; }
+.spark-3 { top: 98px; right: 52px; }
+
+.muyu-button.is-hitting .spark {
+  animation: sparkle 420ms ease-out;
 }
 
 .mallet {
@@ -169,6 +259,17 @@ button {
   height: 52px;
   border-radius: 50%;
   background: linear-gradient(180deg, rgba(255, 229, 191, 0.22), transparent 90%);
+}
+
+.muyu-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 128px;
+  height: 82px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid rgba(236, 194, 138, 0.16);
 }
 
 .muyu-hole {
@@ -244,6 +345,10 @@ button {
   text-align: center;
 }
 
+.stat-card-wide {
+  grid-column: 1 / -1;
+}
+
 .label {
   display: block;
   color: var(--muted);
@@ -259,6 +364,37 @@ button {
 
 .value.bump {
   transform: scale(1.12);
+}
+
+.subvalue {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  text-align: left;
+}
+
+.status-text {
+  display: block;
+  margin-top: 8px;
+  font-size: clamp(16px, 2.6vw, 20px);
+}
+
+.status-badge {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .message-card {
@@ -306,6 +442,11 @@ button {
 .ghost-button:hover {
   transform: translateY(-1px);
   background: rgba(255, 255, 255, 0.92);
+}
+
+.ghost-button:focus-visible {
+  outline: 2px solid rgba(215, 175, 98, 0.6);
+  outline-offset: 2px;
 }
 
 .ghost-button-danger {
@@ -377,6 +518,12 @@ button {
   50% { transform: scale(1.03); opacity: 0.75; }
 }
 
+@keyframes sparkle {
+  0% { transform: scale(0.4) translateY(8px); opacity: 0; }
+  35% { opacity: 1; }
+  100% { transform: scale(1.6) translateY(-16px); opacity: 0; }
+}
+
 @media (max-width: 640px) {
   body {
     padding: 16px;
@@ -384,8 +531,14 @@ button {
   }
 
   .app {
-    padding: 26px 16px 18px;
+    padding: 24px 16px 18px;
     border-radius: 24px;
+  }
+
+  .daily-copy {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
 
   .muyu-section {
@@ -407,7 +560,25 @@ button {
     width: 112px;
   }
 
+  .hint {
+    bottom: -8px;
+    font-size: 13px;
+  }
+
   .stats {
     grid-template-columns: 1fr;
+  }
+
+  .status-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
 }

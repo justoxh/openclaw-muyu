@@ -3,11 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>烦了就敲一下</title>
+    <title>烦了就敲一下 · 赛博木鱼</title>
     <meta
       name="description"
       content="一个轻量的赛博木鱼网站。点一下，听一声，功德 +1，先让情绪落个地。"
     />
+    <meta name="theme-color" content="#f4ede2" />
+    <meta property="og:title" content="烦了就敲一下 · 赛博木鱼" />
+    <meta property="og:description" content="点一下，听一声，功德 +1，先让情绪落个地。" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="./cover.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="烦了就敲一下 · 赛博木鱼" />
+    <meta name="twitter:description" content="不解决人生问题，先让情绪落个地。" />
+    <meta name="twitter:image" content="./cover.svg" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -16,21 +26,38 @@
 
     <main class="app">
       <header class="hero">
-        <p class="eyebrow">赛博木鱼</p>
+        <div class="hero-topline">
+          <p class="eyebrow">赛博木鱼</p>
+          <span id="todayDate" class="date-pill">今天也先稳住</span>
+        </div>
         <h1>烦了就敲一下</h1>
         <p class="subtitle">不解决人生问题，先让情绪落个地。</p>
       </header>
 
+      <section class="daily-panel" aria-label="今日进度">
+        <div class="daily-copy">
+          <span class="daily-label">今日小目标</span>
+          <strong id="goalText">再敲 12 下，给今天一点交代</strong>
+        </div>
+        <div class="progress-wrap" aria-hidden="true">
+          <div id="progressBar" class="progress-bar"></div>
+        </div>
+      </section>
+
       <section class="muyu-section" aria-label="木鱼交互区">
-        <button id="muyuButton" class="muyu-button" type="button" aria-label="敲一下木鱼">
+        <button id="muyuButton" class="muyu-button" type="button" aria-label="敲一下木鱼（也可以按空格键或回车键）">
           <span class="halo"></span>
+          <span class="spark spark-1"></span>
+          <span class="spark spark-2"></span>
+          <span class="spark spark-3"></span>
           <span class="mallet mallet-rest" aria-hidden="true"></span>
           <span class="muyu-body" aria-hidden="true">
             <span class="muyu-top"></span>
+            <span class="muyu-ring"></span>
             <span class="muyu-hole"></span>
             <span class="muyu-base"></span>
           </span>
-          <span class="hint">点我，给脑子降降温</span>
+          <span class="hint">点我，或者按空格键，给脑子降降温</span>
         </button>
         <div id="floatLayer" class="float-layer" aria-hidden="true"></div>
       </section>
@@ -39,10 +66,19 @@
         <article class="stat-card">
           <span class="label">今日功德</span>
           <strong id="todayCount" class="value">0</strong>
+          <span class="subvalue">今天攒的</span>
         </article>
         <article class="stat-card">
           <span class="label">累计功德</span>
           <strong id="totalCount" class="value">0</strong>
+          <span class="subvalue">总共敲的</span>
+        </article>
+        <article class="stat-card stat-card-wide status-card">
+          <div>
+            <span class="label">当前状态</span>
+            <strong id="streakText" class="status-text">刚刚开始，也算开始。</strong>
+          </div>
+          <span id="statusBadge" class="status-badge">平心静气</span>
         </article>
       </section>
 
@@ -52,11 +88,12 @@
 
       <section class="actions" aria-label="操作按钮">
         <button id="soundToggle" class="ghost-button" type="button">音效：开</button>
+        <button id="shareCopy" class="ghost-button" type="button">复制今日战绩</button>
         <button id="resetToday" class="ghost-button ghost-button-danger" type="button">今天重新开始</button>
       </section>
 
       <footer class="footer-note">
-        记录仅保存在当前设备，今日功德会在新的一天自动刷新。
+        记录仅保存在当前设备，今日功德会在新的一天自动刷新。没有账号，没有后台，只有你和这只木鱼互相消耗。
       </footer>
     </main>
 

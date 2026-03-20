@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'openclaw-muyu-v1';
+const DAILY_GOAL = 18;
 
 const comfortMessages = [
   '先别急，缓一下再说。',
@@ -10,7 +11,18 @@ const comfortMessages = [
   '世界很吵，你先稳住自己。',
   '别硬扛，先给情绪一点台阶。',
   '这一声下去，算是给自己一个交代。',
-  '没关系，今天允许你状态一般。'
+  '没关系，今天允许你状态一般。',
+  '别把自己逼太紧，今天先活着。',
+  '你现在需要的，可能不是答案，是缓冲。'
+];
+
+const statusLevels = [
+  { min: 0, badge: '平心静气', text: '刚刚开始，也算开始。' },
+  { min: 5, badge: '稳住一点', text: '已经敲了几下，脑子没刚才那么吵了。' },
+  { min: 12, badge: '功德上涨', text: '手感开始顺了，情绪也没那么扎手。' },
+  { min: 18, badge: '今日达标', text: '今天的基础功德够了，先夸你一句。' },
+  { min: 36, badge: '木鱼熟客', text: '你已经进入熟练积德状态，继续保持。' },
+  { min: 72, badge: '电子禅修', text: '敲到这个数，至少说明你还没彻底放弃今天。' }
 ];
 
 const todayCountEl = document.getElementById('todayCount');
@@ -18,8 +30,14 @@ const totalCountEl = document.getElementById('totalCount');
 const comfortTextEl = document.getElementById('comfortText');
 const soundToggleEl = document.getElementById('soundToggle');
 const resetTodayEl = document.getElementById('resetToday');
+const shareCopyEl = document.getElementById('shareCopy');
 const muyuButtonEl = document.getElementById('muyuButton');
 const floatLayerEl = document.getElementById('floatLayer');
+const progressBarEl = document.getElementById('progressBar');
+const goalTextEl = document.getElementById('goalText');
+const todayDateEl = document.getElementById('todayDate');
+const streakTextEl = document.getElementById('streakText');
+const statusBadgeEl = document.getElementById('statusBadge');
 
 let audioContext;
 let state = loadState();
@@ -29,11 +47,21 @@ render();
 muyuButtonEl.addEventListener('click', handleKnock);
 soundToggleEl.addEventListener('click', toggleSound);
 resetTodayEl.addEventListener('click', resetToday);
+shareCopyEl.addEventListener('click', copySummary);
 
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) {
     normalizeToday();
     render();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  const tagName = document.activeElement?.tagName;
+  if (tagName === 'INPUT' || tagName === 'TEXTAREA') return;
+  if (event.code === 'Space' || event.code === 'Enter') {
+    event.preventDefault();
+    handleKnock(event);
   }
 });
 
@@ -43,6 +71,12 @@ function getTodayString() {
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function formatTodayLabel() {
+  const now = new Date();
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  return `${now.getMonth() + 1} 月 ${now.getDate()} 日 · ${weekdays[now.getDay()]}`;
 }
 
 function loadState() {
@@ -77,6 +111,7 @@ function normalizeToday() {
   if (state.lastDate !== today) {
     state.todayMerit = 0;
     state.lastDate = today;
+    state.comfortText = '新的一天，重新积德。';
     saveState();
   }
 }
@@ -86,6 +121,26 @@ function render() {
   totalCountEl.textContent = state.totalMerit;
   comfortTextEl.textContent = state.comfortText;
   soundToggleEl.textContent = `音效：${state.soundEnabled ? '开' : '关'}`;
+  todayDateEl.textContent = formatTodayLabel();
+  renderGoal();
+  renderStatus();
+}
+
+function renderGoal() {
+  const progress = Math.min(state.todayMerit / DAILY_GOAL, 1);
+  progressBarEl.style.width = `${progress * 100}%`;
+  if (state.todayMerit >= DAILY_GOAL) {
+    goalTextEl.textContent = `今日 ${DAILY_GOAL} 下已达标，可以收手，也可以继续积。`;
+    return;
+  }
+  const remain = DAILY_GOAL - state.todayMerit;
+  goalTextEl.textContent = `再敲 ${remain} 下，给今天一点交代`;
+}
+
+function renderStatus() {
+  const level = [...statusLevels].reverse().find((item) => state.todayMerit >= item.min) || statusLevels[0];
+  streakTextEl.textContent = level.text;
+  statusBadgeEl.textContent = level.badge;
 }
 
 function handleKnock(event) {
@@ -124,6 +179,18 @@ function resetToday() {
   animateCount(todayCountEl);
 }
 
+async function copySummary() {
+  const text = `我今天在赛博木鱼里已经敲了 ${state.todayMerit} 下，累计功德 ${state.totalMerit}。世界很吵，但我先稳住了。`;
+  try {
+    await navigator.clipboard.writeText(text);
+    state.comfortText = '今日战绩已经复制好了，发不发随你。';
+  } catch (error) {
+    state.comfortText = '复制没成功。浏览器不配合，你就手动炫耀吧。';
+  }
+  saveState();
+  render();
+}
+
 function animateCount(element) {
   element.classList.remove('bump');
   window.requestAnimationFrame(() => {
@@ -144,10 +211,12 @@ function spawnFloatText(event) {
   const rect = floatLayerEl.getBoundingClientRect();
   const text = document.createElement('span');
   text.className = 'float-text';
-  text.textContent = '功德 +1';
 
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const variants = ['功德 +1', '先稳住', '缓一缓', '别上头'];
+  text.textContent = variants[Math.floor(Math.random() * variants.length)];
+
+  const x = event.clientX ? event.clientX - rect.left : rect.width / 2;
+  const y = event.clientY ? event.clientY - rect.top : rect.height / 2;
 
   text.style.left = `${x}px`;
   text.style.top = `${y}px`;

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8f2e9"/>
+      <stop offset="100%" stop-color="#eadac6"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="38%" r="40%">
+      <stop offset="0%" stop-color="#ffe0aa" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffe0aa" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#9b6338"/>
+      <stop offset="100%" stop-color="#5b3115"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="610" cy="235" r="190" fill="url(#glow)"/>
+  <text x="600" y="150" text-anchor="middle" font-size="28" fill="#9f6232" font-family="PingFang SC, Segoe UI, sans-serif" letter-spacing="8">赛博木鱼</text>
+  <text x="600" y="230" text-anchor="middle" font-size="74" font-weight="700" fill="#3f2b1f" font-family="PingFang SC, Segoe UI, sans-serif">烦了就敲一下</text>
+  <text x="600" y="282" text-anchor="middle" font-size="30" fill="#7f6652" font-family="PingFang SC, Segoe UI, sans-serif">点一下，听一声，功德 +1，先让情绪落个地。</text>
+  <ellipse cx="600" cy="430" rx="160" ry="95" fill="#6b3a18"/>
+  <ellipse cx="600" cy="418" rx="160" ry="95" fill="url(#wood)"/>
+  <ellipse cx="600" cy="425" rx="58" ry="34" fill="#432010"/>
+  <ellipse cx="600" cy="418" rx="88" ry="54" fill="none" stroke="#d5ab70" stroke-opacity="0.25" stroke-width="8"/>
+  <rect x="700" y="295" width="150" height="20" rx="10" fill="#b57b45" transform="rotate(24 700 295)"/>
+  <rect x="678" y="278" width="44" height="54" rx="20" fill="#d29a5e" transform="rotate(24 678 278)"/>
+</svg>
