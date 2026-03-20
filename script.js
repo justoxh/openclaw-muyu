@@ -1,6 +1,12 @@
-const APP_VERSION = 'v1.2.0';
+const APP_VERSION = 'v1.2.1';
 const STORAGE_KEY = 'openclaw-muyu-v1';
 const DAILY_GOAL = 18;
+const AUDIO_FILES = [
+  './assets/muyu-1.mp3',
+  './assets/muyu-2.mp3',
+  './assets/muyu-3.mp3',
+  './assets/muyu-4.mp3'
+];
 
 const comfortMessages = [
   '先别急，缓一下再说。',
@@ -42,10 +48,14 @@ const statusBadgeEl = document.getElementById('statusBadge');
 const versionTextEl = document.getElementById('versionText');
 
 let audioContext;
+let audioPlayers = [];
+let audioReady = false;
+let audioLoadFailed = false;
 let lastTouchEnd = 0;
 let state = loadState();
 normalizeToday();
 render();
+prepareAudio();
 
 muyuButtonEl.addEventListener('click', handleKnock);
 muyuButtonEl.addEventListener('touchend', preventDoubleTapZoom, { passive: false });
@@ -164,7 +174,7 @@ function handleKnock(event) {
   animateKnock();
   spawnFloatText(event);
   if (state.soundEnabled) {
-    playWoodSound();
+    playKnockSound();
   }
 }
 
@@ -173,7 +183,7 @@ function toggleSound() {
   saveState();
   render();
   if (state.soundEnabled) {
-    playWoodSound(0.45);
+    playKnockSound(0.38);
   }
 }
 
@@ -250,6 +260,74 @@ function preventDoubleTapZoom(event) {
     event.preventDefault();
   }
   lastTouchEnd = now;
+}
+
+function prepareAudio() {
+  audioPlayers = AUDIO_FILES.map((src) => {
+    const audio = new Audio(src);
+    audio.preload = 'auto';
+    return audio;
+  });
+
+  if (!audioPlayers.length) {
+    audioLoadFailed = true;
+    return;
+  }
+
+  let settled = 0;
+  let successCount = 0;
+  const finish = () => {
+    settled += 1;
+    if (settled === audioPlayers.length) {
+      audioReady = successCount > 0;
+      audioLoadFailed = successCount === 0;
+    }
+  };
+
+  for (const audio of audioPlayers) {
+    audio.addEventListener('canplaythrough', () => {
+      successCount += 1;
+      finish();
+    }, { once: true });
+
+    audio.addEventListener('error', () => {
+      finish();
+    }, { once: true });
+
+    audio.load();
+  }
+}
+
+function playKnockSound(volumeScale = 1) {
+  if (audioReady && audioPlayers.length) {
+    const selected = audioPlayers[Math.floor(Math.random() * audioPlayers.length)];
+    playAudioFile(selected, volumeScale).catch((error) => {
+      console.warn('音频文件播放失败，回退到合成音效。', error);
+      playWoodSound(volumeScale);
+    });
+    return;
+  }
+
+  if (audioLoadFailed) {
+    playWoodSound(volumeScale);
+    return;
+  }
+
+  const fallbackTimeout = window.setTimeout(() => {
+    if (!audioReady) {
+      playWoodSound(volumeScale);
+    }
+  }, 180);
+
+  const stopFallback = () => window.clearTimeout(fallbackTimeout);
+  window.setTimeout(stopFallback, 220);
+}
+
+async function playAudioFile(sourceAudio, volumeScale = 1) {
+  const audio = sourceAudio.cloneNode();
+  audio.volume = Math.min(1, Math.max(0.18, 0.72 + (Math.random() * 0.16 - 0.08)) * volumeScale);
+  audio.currentTime = 0;
+  await audio.play();
 }
 
 function getAudioContext() {
